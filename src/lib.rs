@@ -9,8 +9,11 @@ pub fn interpret(line: &str) -> anyhow::Result<ExecResult> {
     program.exec()
 }
 
+/// Program holds the parsed Postfix program, guaranteed to be syntactically correct.
 struct Program {
+    /// The number of arguments the program expects.
     n_args: usize,
+    /// The tokens that make up this program.
     tokens: Vec<Token>,
 }
 
