@@ -10,7 +10,7 @@ pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
     match stack.pop() {
         Some(token) => match token {
             Token::Num(val) => Ok(Some(val)),
-            _ => Err(anyhow!("invalid token on top of stack")),
+            t => Err(Error::ReturnWrongToken(t.to_string()).into()),
         },
         None => Ok(None),
     }
@@ -41,12 +41,12 @@ fn parse_args(s: &str) -> anyhow::Result<Vec<isize>> {
     let s = s.trim();
 
     if !s.starts_with("[") {
-        return Err(arg_parse_error("missing leading '['"));
+        return Err(Error::ArgsParseMissingOpeningBracket.into());
     }
     let s = &s[1..];
 
     if !s.ends_with("]") {
-        return Err(arg_parse_error("missing trailing ']'"));
+        return Err(Error::ArgsParseMissingClosingBracket.into());
     }
     let s = &s[..s.len() - 1];
 
@@ -80,12 +80,12 @@ impl Program {
         let line = line.trim();
 
         if !line.starts_with("(") {
-            return Err(line_parse_error("missing leading '('"));
+            return Err(Error::ProgramParseMissingOpeningParens.into());
         }
         let line = &line[1..];
 
         if !line.ends_with(")") {
-            return Err(line_parse_error("missing trailing ')'"));
+            return Err(Error::ProgramParseMissingClosingParens.into());
         }
         let line = &line[..line.len() - 1];
 
@@ -93,12 +93,12 @@ impl Program {
 
         match iter.next() {
             Some(token) if token == "postfix" => {}
-            _ => return Err(line_parse_error("missing 'postfix'")),
+            _ => return Err(Error::ProgramParseMissingPostfix.into()),
         }
 
         let n_args = iter
             .next()
-            .ok_or_else(|| line_parse_error("missing number of args"))?
+            .ok_or_else(|| Error::ProgramParseMissingNumArgs)?
             .parse::<usize>()?;
 
         let mut tokens = vec![];
@@ -145,20 +145,28 @@ fn handle_token(stack: &mut Vec<Token>, token: Token) -> anyhow::Result<()> {
         Token::Cmd(cmd) => match cmd {
             Cmd::Add => add(stack),
             Cmd::Sub => sub(stack),
+            Cmd::Pop => pop(stack),
         },
     }
 }
 
 fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     if stack.len() < 2 {
-        return Err(anyhow!("not enough args to call 'add' command"));
+        return Err(Error::StackMissingToken.into());
     }
 
     let ty = stack.pop().unwrap();
     let tx = stack.pop().unwrap();
     match (tx, ty) {
         (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x + y)),
-        (x, y) => return Err(stack_error(x, y, "add")),
+        (x, y) => {
+            return Err(Error::StackBinaryCmd {
+                x: x.to_string(),
+                y: y.to_string(),
+                cmd: "add".to_string(),
+            }
+            .into());
+        }
     }
 
     Ok(())
@@ -166,16 +174,31 @@ fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
 
 fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     if stack.len() < 2 {
-        return Err(anyhow!("not enough args to call 'sub' command"));
+        return Err(Error::StackMissingToken.into());
     }
 
     let ty = stack.pop().unwrap();
     let tx = stack.pop().unwrap();
     match (tx, ty) {
         (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x - y)),
-        (x, y) => return Err(stack_error(x, y, "sub")),
+        (x, y) => {
+            return Err(Error::StackBinaryCmd {
+                x: x.to_string(),
+                y: y.to_string(),
+                cmd: "sub".to_string(),
+            }
+            .into());
+        }
     }
 
+    Ok(())
+}
+
+fn pop(stack: &mut Vec<Token>) -> anyhow::Result<()> {
+    if stack.len() < 1 {
+        return Err(Error::StackMissingToken.into());
+    }
+    stack.pop();
     Ok(())
 }
 
@@ -199,16 +222,37 @@ impl fmt::Display for Program {
     }
 }
 
-fn line_parse_error(msg: &str) -> anyhow::Error {
-    anyhow!("Parsing line failed: {}", msg)
-}
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("program parse error: missing opening parenthesis")]
+    ProgramParseMissingOpeningParens,
 
-fn arg_parse_error(msg: &str) -> anyhow::Error {
-    anyhow!("Parsing args string failed: {}", msg)
-}
+    #[error("program parse error: missing closing parenthesis")]
+    ProgramParseMissingClosingParens,
 
-fn stack_error(x: Token, y: Token, msg: &str) -> anyhow::Error {
-    anyhow!("tokens invalid for command: {} {} {}", x, y, msg)
+    #[error("program parse error: missing 'postfix'")]
+    ProgramParseMissingPostfix,
+
+    #[error("program parse error: missing numb args")]
+    ProgramParseMissingNumArgs,
+
+    #[error("token line")]
+    TokenParse,
+
+    #[error("args parse error: missing opening bracket")]
+    ArgsParseMissingOpeningBracket,
+
+    #[error("args parse error: missing closing bracket")]
+    ArgsParseMissingClosingBracket,
+
+    #[error("not enough tokens on stack")]
+    StackMissingToken,
+
+    #[error("wrong tokens on stack: (`{x:?}`, `{y:?}`, `{cmd:?}`)")]
+    StackBinaryCmd { x: String, y: String, cmd: String },
+
+    #[error("cannot return token on stack: (`{0}`")]
+    ReturnWrongToken(String),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -242,6 +286,7 @@ impl Token {
         match token {
             "add" => return Ok(Token::Cmd(Cmd::Add)),
             "sub" => return Ok(Token::Cmd(Cmd::Sub)),
+            "pop" => return Ok(Token::Cmd(Cmd::Pop)),
             _ => {
                 return Err(anyhow!(format!(
                     "Parsing token failed: unknown command: {}",
@@ -256,6 +301,7 @@ impl Token {
 enum Cmd {
     Add,
     Sub,
+    Pop,
 }
 
 impl fmt::Display for Cmd {
@@ -263,6 +309,7 @@ impl fmt::Display for Cmd {
         let s = match self {
             Cmd::Add => "add",
             Cmd::Sub => "sub",
+            Cmd::Pop => "pop",
         };
         write!(f, "{}", s)
     }
@@ -418,6 +465,28 @@ mod tests {
 
         let got = res.expect("valid stack");
         let want = -1;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn only_top_of_stack_returned() {
+        let s = "(postfix 0 1 2 3)[]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 3;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn pop() {
+        let s = "(postfix 0 1 2 3 pop)[]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 2;
 
         assert_eq!(got, want);
     }
