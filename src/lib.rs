@@ -138,21 +138,44 @@ impl Program {
 /// Handle a single token.
 fn handle_token(stack: &mut Vec<Token>, token: Token) -> anyhow::Result<()> {
     match token {
-        Token::Num(val) => stack.push(Token::Num(val)),
+        Token::Num(val) => {
+            stack.push(Token::Num(val));
+            Ok(())
+        }
         Token::Cmd(cmd) => match cmd {
-            Cmd::Add => {
-                if stack.len() < 2 {
-                    return Err(anyhow!("not enough args to call 'add' command"));
-                }
-                let tx = stack.pop().unwrap();
-                let ty = stack.pop().unwrap();
-                match (tx, ty) {
-                    (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x + y)),
-                    (_, _) => return Err(anyhow!("not enough args to call 'add' command")),
-                }
-            }
+            Cmd::Add => add(stack),
+            Cmd::Sub => sub(stack),
         },
     }
+}
+
+fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
+    if stack.len() < 2 {
+        return Err(anyhow!("not enough args to call 'add' command"));
+    }
+
+    let ty = stack.pop().unwrap();
+    let tx = stack.pop().unwrap();
+    match (tx, ty) {
+        (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x + y)),
+        (x, y) => return Err(stack_error(x, y, "add")),
+    }
+
+    Ok(())
+}
+
+fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
+    if stack.len() < 2 {
+        return Err(anyhow!("not enough args to call 'sub' command"));
+    }
+
+    let ty = stack.pop().unwrap();
+    let tx = stack.pop().unwrap();
+    match (tx, ty) {
+        (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x - y)),
+        (x, y) => return Err(stack_error(x, y, "sub")),
+    }
+
     Ok(())
 }
 
@@ -182,6 +205,10 @@ fn line_parse_error(msg: &str) -> anyhow::Error {
 
 fn arg_parse_error(msg: &str) -> anyhow::Error {
     anyhow!("Parsing args string failed: {}", msg)
+}
+
+fn stack_error(x: Token, y: Token, msg: &str) -> anyhow::Error {
+    anyhow!("tokens invalid for command: {} {} {}", x, y, msg)
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -214,6 +241,7 @@ impl Token {
 
         match token {
             "add" => return Ok(Token::Cmd(Cmd::Add)),
+            "sub" => return Ok(Token::Cmd(Cmd::Sub)),
             _ => {
                 return Err(anyhow!(format!(
                     "Parsing token failed: unknown command: {}",
@@ -227,12 +255,14 @@ impl Token {
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Cmd {
     Add,
+    Sub,
 }
 
 impl fmt::Display for Cmd {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             Cmd::Add => "add",
+            Cmd::Sub => "sub",
         };
         write!(f, "{}", s)
     }
@@ -355,6 +385,39 @@ mod tests {
 
         let got = res.expect("valid stack");
         let want = 1;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn interpret_can_sub_negative_result() {
+        let s = "(postfix 0 1 2 sub)[]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = -1;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn interpret_can_sub_with_one_arg() {
+        let s = "(postfix 1 2 sub)[3]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 1;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn interpret_can_sub_with_two_arg() {
+        let s = "(postfix 2 sub)[2 3]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = -1;
 
         assert_eq!(got, want);
     }
