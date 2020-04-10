@@ -6,7 +6,9 @@ pub fn interpret(line: &str) -> anyhow::Result<ExecResult> {
     println!("Interpreting Postfix program: {}", line);
     let program = Program::new(line)?;
 
-    program.exec()
+    // TODO: We don't currently handle args.
+    let empty = vec![];
+    program.exec(empty)
 }
 
 /// Program holds the parsed Postfix program, guaranteed to be syntactically correct.
@@ -20,7 +22,7 @@ struct Program {
 impl Program {
     /// Parses line and creates a `Program` object.
     /// Returns an `Err` if line does not parse correctly.
-    fn new(line: &str) -> anyhow::Result<Self> {
+    fn new(line: &str) -> anyhow::Result<Program> {
         let line = line.trim();
 
         if !line.starts_with("(") {
@@ -56,16 +58,60 @@ impl Program {
     }
 
     /// Execute the program and return the top item from the stack.
-    fn exec(&self) -> anyhow::Result<ExecResult> {
-        // Quieten the compiler.
-        println!("Program: {}", self);
+    fn exec(&self, args: Vec<usize>) -> anyhow::Result<ExecResult> {
+        if self.n_args != args.len() {
+            return Err(anyhow!(
+                "wrong number of arguments: got {} want {}",
+                args.len(),
+                self.n_args
+            ));
+        }
 
-        Ok(ExecResult::Value(0))
+        let mut stack = Vec::new();
+
+        for arg in args {
+            stack.push(Token::Num(arg));
+        }
+
+        for token in self.tokens.iter() {
+            handle_token(&mut stack, *token)?;
+        }
+
+        if stack.len() < 1 {
+            return Err(anyhow!("stack empty"));
+        }
+
+        let token = stack.pop();
+        match token {
+            Some(Token::Num(val)) => Ok(ExecResult::Value(val)),
+            _ => Err(anyhow!("invalid top of stack after program execution")),
+        }
     }
 }
 
+/// Handle a single token.
+fn handle_token(stack: &mut Vec<Token>, token: Token) -> anyhow::Result<()> {
+    match token {
+        Token::Num(val) => stack.push(Token::Num(val)),
+        Token::Cmd(cmd) => match cmd {
+            Cmd::Add => {
+                if stack.len() < 2 {
+                    return Err(anyhow!("not enough args to call 'add' command"));
+                }
+                let tx = stack.pop().unwrap();
+                let ty = stack.pop().unwrap();
+                match (tx, ty) {
+                    (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x + y)),
+                    (_, _) => return Err(anyhow!("not enough args to call 'add' command")),
+                }
+            }
+        },
+    }
+    Ok(())
+}
+
 impl fmt::Display for Program {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut v = vec![];
 
         v.push("(postfix ".to_string());
@@ -89,17 +135,27 @@ fn line_parse_error(msg: &str) -> anyhow::Error {
 }
 
 /// Results that program execution can return.
+#[derive(Debug, Copy, Clone)]
 pub enum ExecResult {
     Value(usize),
 }
 
+impl fmt::Display for ExecResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExecResult::Value(val) => write!(f, "{}", val),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 enum Token {
     Num(usize),
     Cmd(Cmd),
 }
 
 impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             Token::Num(val) => val.to_string(),
             Token::Cmd(cmd) => cmd.to_string(),
@@ -132,12 +188,13 @@ impl Token {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 enum Cmd {
     Add,
 }
 
 impl fmt::Display for Cmd {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
             Cmd::Add => "add",
         };

@@ -8,7 +8,9 @@ fn main() -> anyhow::Result<()> {
         process::exit(1);
     }
     let line = &args[1];
-    postfix::interpret(line)?;
+    let result = postfix::interpret(line)?;
+
+    println!("{}", result);
 
     Ok(())
 }
