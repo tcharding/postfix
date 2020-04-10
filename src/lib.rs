@@ -347,4 +347,15 @@ mod tests {
 
         assert_eq!(got, want);
     }
+
+    #[test]
+    fn interpret_can_sub_with_empty_args() {
+        let s = "(postfix 0 2 1 sub)[]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 1;
+
+        assert_eq!(got, want);
+    }
 }
