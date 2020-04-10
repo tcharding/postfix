@@ -10,7 +10,10 @@ fn main() -> anyhow::Result<()> {
     let line = &args[1];
     let result = postfix::interpret(line)?;
 
-    println!("{}", result);
+    match result {
+        None => println!("(empty stack)"),
+        Some(val) => println!("{}", val),
+    }
 
     Ok(())
 }

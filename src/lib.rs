@@ -1,41 +1,95 @@
 use anyhow::anyhow;
+use std::dbg;
 use std::fmt;
 
 /// Interpret line and return the top item of the stack after execution.
-pub fn interpret(line: &str) -> anyhow::Result<ExecResult> {
-    println!("Interpreting Postfix program: {}", line);
-    let program = Program::new(line)?;
+pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
+    let (program, args) = parse_input_line(line)?;
+    let mut stack = program.exec(args)?;
 
-    // TODO: We don't currently handle args.
-    let empty = vec![];
-    program.exec(empty)
+    match stack.pop() {
+        Some(token) => match token {
+            Token::Num(val) => Ok(Some(val)),
+            _ => Err(anyhow!("invalid token on top of stack")),
+        },
+        None => Ok(None),
+    }
+}
+
+fn parse_input_line(s: &str) -> anyhow::Result<(Program, Vec<isize>)> {
+    let (program, args) = split_input_line(s);
+
+    dbg!(program);
+    dbg!(args);
+
+    let program = Program::new(program)?;
+    let args = parse_args(args)?;
+
+    Ok((program, args))
+}
+
+fn split_input_line(s: &str) -> (&str, &str) {
+    if let Some(index) = s.find("[") {
+        return (&s[..index], &s[index..]);
+    }
+    (s, "")
+}
+
+fn parse_args(s: &str) -> anyhow::Result<Vec<isize>> {
+    let mut v = vec![];
+
+    let s = s.trim();
+
+    if !s.starts_with("[") {
+        return Err(arg_parse_error("missing leading '['"));
+    }
+    let s = &s[1..];
+
+    if !s.ends_with("]") {
+        return Err(arg_parse_error("missing trailing ']'"));
+    }
+    let s = &s[..s.len() - 1];
+
+    for arg in s.split_ascii_whitespace() {
+        let arg = if arg.ends_with(",") {
+            &arg[..arg.len() - 1]
+        } else {
+            &arg
+        };
+
+        let val = arg.parse::<isize>()?;
+        v.push(val);
+    }
+
+    Ok(v)
 }
 
 /// Program holds the parsed Postfix program, guaranteed to be syntactically correct.
 struct Program {
     /// The number of arguments the program expects.
     n_args: usize,
-    /// The tokens that make up this program.
+
+    /// The tokens that make up this program, these can be numbers or commands.
     tokens: Vec<Token>,
 }
 
 impl Program {
     /// Parses line and creates a `Program` object.
-    /// Returns an `Err` if line does not parse correctly.
+    /// Returns an `Err` if the line is not syntactically correct.
     fn new(line: &str) -> anyhow::Result<Program> {
         let line = line.trim();
 
         if !line.starts_with("(") {
             return Err(line_parse_error("missing leading '('"));
         }
-        let line = &line[1..]; // FIXME: Does this work with UTF-8 characters?
+        let line = &line[1..];
 
         if !line.ends_with(")") {
             return Err(line_parse_error("missing trailing ')'"));
         }
-        let line = &line[..line.len() - 1]; // FIXME: Does this work with UTF-8 characters?
+        let line = &line[..line.len() - 1];
 
-        let mut iter = line.split_whitespace();
+        let mut iter = line.split_ascii_whitespace();
 
         match iter.next() {
             Some(token) if token == "postfix" => {}
@@ -58,7 +112,7 @@ impl Program {
     }
 
     /// Execute the program and return the top item from the stack.
-    fn exec(&self, args: Vec<usize>) -> anyhow::Result<ExecResult> {
+    fn exec(&self, args: Vec<isize>) -> anyhow::Result<Vec<Token>> {
         if self.n_args != args.len() {
             return Err(anyhow!(
                 "wrong number of arguments: got {} want {}",
@@ -77,15 +131,7 @@ impl Program {
             handle_token(&mut stack, *token)?;
         }
 
-        if stack.len() < 1 {
-            return Err(anyhow!("stack empty"));
-        }
-
-        let token = stack.pop();
-        match token {
-            Some(Token::Num(val)) => Ok(ExecResult::Value(val)),
-            _ => Err(anyhow!("invalid top of stack after program execution")),
-        }
+        Ok(stack)
     }
 }
 
@@ -134,23 +180,13 @@ fn line_parse_error(msg: &str) -> anyhow::Error {
     anyhow!("Parsing line failed: {}", msg)
 }
 
-/// Results that program execution can return.
+fn arg_parse_error(msg: &str) -> anyhow::Error {
+    anyhow!("Parsing args string failed: {}", msg)
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ExecResult {
-    Value(usize),
-}
-
-impl fmt::Display for ExecResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ExecResult::Value(val) => write!(f, "{}", val),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
 enum Token {
-    Num(usize),
+    Num(isize),
     Cmd(Cmd),
 }
 
@@ -172,7 +208,7 @@ impl Token {
             &s
         };
 
-        if let Ok(val) = token.parse::<usize>() {
+        if let Ok(val) = token.parse::<isize>() {
             return Ok(Token::Num(val));
         }
 
@@ -188,7 +224,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum Cmd {
     Add,
 }
@@ -207,6 +243,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn can_split_valid_input_line_with_empty_args() {
+        let s = "(postfix 0 1 2 add)[]";
+        let (prog, args) = split_input_line(s);
+
+        assert_eq!(prog, "(postfix 0 1 2 add)");
+        assert_eq!(args, "[]");
+    }
+
+    #[test]
+    fn can_split_valid_input_line_without_args() {
+        let s = "(postfix 0 1 2 add)";
+        let (prog, args) = split_input_line(s);
+
+        assert_eq!(prog, "(postfix 0 1 2 add)");
+        assert_eq!(args, "");
+    }
+
+    #[test]
+    fn can_split_valid_input_line_with_args() {
+        let s = "(postfix 0 1 2 add)[1, 2, 3]";
+        let (prog, args) = split_input_line(s);
+
+        assert_eq!(prog, "(postfix 0 1 2 add)");
+        assert_eq!(args, "[1, 2, 3]");
+    }
+
+    #[test]
+    fn can_parse_empty_args() {
+        let input = "[]";
+        let want = vec![];
+        let got = parse_args(input).expect("can parse args string");
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn can_parse_args() {
+        let input = "[1, 2, 3]";
+        let want = vec![1, 2, 3];
+        let got = parse_args(input).expect("can parse args string");
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
     fn program_parses_add() {
         let s = "(postfix 0 1 2 add)";
         let _ = Program::new(s).expect("trivial add program");
@@ -217,8 +298,9 @@ mod tests {
         let s = "(postfix 0 1 2 add)";
         let prog = Program::new(s).expect("parse trivial add program");
 
-        let got = prog.exec(vec![]).expect("exec");
-        let want = ExecResult::Value(3);
+        let mut stack = prog.exec(vec![]).expect("exec");
+        let got = stack.pop().expect("valid stack");
+        let want = Token::Num(3);
 
         assert_eq!(got, want);
     }
@@ -231,5 +313,38 @@ mod tests {
         if let Ok(_) = prog.exec(vec![]) {
             panic!("we should have error'ed, not enough args on stack for add")
         }
+    }
+
+    #[test]
+    fn interpret_can_add_with_empty_args() {
+        let s = "(postfix 0 1 2 add)[]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 3;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn interpret_can_add_with_one_arg() {
+        let s = "(postfix 1 2 add)[3]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 5;
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn interpret_can_add_with_two_arg() {
+        let s = "(postfix 2 add)[2 3]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 5;
+
+        assert_eq!(got, want);
     }
 }
