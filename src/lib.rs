@@ -135,7 +135,7 @@ fn line_parse_error(msg: &str) -> anyhow::Error {
 }
 
 /// Results that program execution can return.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ExecResult {
     Value(usize),
 }
@@ -210,5 +210,26 @@ mod tests {
     fn program_parses_add() {
         let s = "(postfix 0 1 2 add)";
         let _ = Program::new(s).expect("trivial add program");
+    }
+
+    #[test]
+    fn program_execs_add() {
+        let s = "(postfix 0 1 2 add)";
+        let prog = Program::new(s).expect("parse trivial add program");
+
+        let got = prog.exec(vec![]).expect("exec");
+        let want = ExecResult::Value(3);
+
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn program_execs_add_with_error() {
+        let s = "(postfix 0 1 add)"; // Remember first 0 is number of args.
+        let prog = Program::new(s).expect("parse trivial add program");
+
+        if let Ok(_) = prog.exec(vec![]) {
+            panic!("we should have error'ed, not enough args on stack for add")
+        }
     }
 }
