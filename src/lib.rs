@@ -187,30 +187,20 @@ fn pop(stack: &mut Vec<Token>) -> anyhow::Result<()> {
 /// Executed the 'add' command with a given stack.  Adds the top two integers
 /// together and pushes the result back onto the stack.
 fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    if stack.len() < 2 {
-        return Err(Error::StackMissingToken.into());
-    }
-
-    let ty = stack.pop().unwrap();
-    let tx = stack.pop().unwrap();
-    match (tx, ty) {
-        (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x + y)),
-        (x, y) => {
-            return Err(Error::StackBinaryCmd {
-                x: x.to_string(),
-                y: y.to_string(),
-                cmd: "add".to_string(),
-            }
-            .into());
-        }
-    }
-
-    Ok(())
+    do_binary_operation(stack, "add", |x, y| x + y)
 }
 
 /// Executed the 'sub' command with a given stack.  Subtracts the top integer
 /// on the stack from second to top integer and pushes the result back onto the stack.
 fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
+    do_binary_operation(stack, "add", |x, y| x - y)
+}
+
+fn do_binary_operation(
+    stack: &mut Vec<Token>,
+    name: &str,
+    op: fn(isize, isize) -> isize,
+) -> anyhow::Result<()> {
     if stack.len() < 2 {
         return Err(Error::StackMissingToken.into());
     }
@@ -218,12 +208,15 @@ fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     let ty = stack.pop().unwrap();
     let tx = stack.pop().unwrap();
     match (tx, ty) {
-        (Token::Num(x), Token::Num(y)) => stack.push(Token::Num(x - y)),
+        (Token::Num(x), Token::Num(y)) => {
+            let res = op(x, y);
+            stack.push(Token::Num(res));
+        }
         (x, y) => {
             return Err(Error::StackBinaryCmd {
                 x: x.to_string(),
                 y: y.to_string(),
-                cmd: "sub".to_string(),
+                cmd: name.to_string(),
             }
             .into());
         }
