@@ -4,7 +4,7 @@ use std::fmt;
 
 /// Interpret line and return the top item of the stack after execution.
 pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
-    let (program, args) = parse_input_line(line)?;
+    let (program, args) = parse_input_string(line)?;
     let mut stack = program.exec(args)?;
 
     match stack.pop() {
@@ -16,8 +16,9 @@ pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
     }
 }
 
-fn parse_input_line(s: &str) -> anyhow::Result<(Program, Vec<isize>)> {
-    let (program, args) = split_input_line(s);
+/// Parses an input string into a syntactically correct `Program` and a list of input arguments.
+fn parse_input_string(s: &str) -> anyhow::Result<(Program, Vec<isize>)> {
+    let (program, args) = split(s);
 
     dbg!(program);
     dbg!(args);
@@ -28,30 +29,52 @@ fn parse_input_line(s: &str) -> anyhow::Result<(Program, Vec<isize>)> {
     Ok((program, args))
 }
 
-fn split_input_line(s: &str) -> (&str, &str) {
-    if let Some(index) = s.find("[") {
+// FIXME: The following two functions are only public so that we can include tests in the docs.
+
+/// Splits an input string into the two strings, program and args.
+///
+/// # Examples
+///
+/// ```
+/// let s = "(postfix 1 2 add)[3]";
+/// let (prog, args) = postfix::split(s);
+///
+/// assert_eq!(prog, "(postfix 1 2 add)");
+/// assert_eq!(args, "[3]");
+/// ```
+pub fn split(s: &str) -> (&str, &str) {
+    if let Some(index) = s.find('[') {
         return (&s[..index], &s[index..]);
     }
     (s, "")
 }
 
-fn parse_args(s: &str) -> anyhow::Result<Vec<isize>> {
+/// Parse an args list into a list of integers
+///
+/// # Examples
+/// ```
+/// let args = "[1, 2, 3]";
+/// let want = vec![1, 2, 3];
+/// let got = postfix::parse_args(args).unwrap();
+/// assert_eq!(got, want);
+/// ```
+pub fn parse_args(s: &str) -> anyhow::Result<Vec<isize>> {
     let mut v = vec![];
 
     let s = s.trim();
 
-    if !s.starts_with("[") {
+    if !s.starts_with('[') {
         return Err(Error::ArgsParseMissingOpeningBracket.into());
     }
     let s = &s[1..];
 
-    if !s.ends_with("]") {
+    if !s.ends_with(']') {
         return Err(Error::ArgsParseMissingClosingBracket.into());
     }
     let s = &s[..s.len() - 1];
 
     for arg in s.split_ascii_whitespace() {
-        let arg = if arg.ends_with(",") {
+        let arg = if arg.ends_with(',') {
             &arg[..arg.len() - 1]
         } else {
             &arg
@@ -69,27 +92,27 @@ struct Program {
     /// The number of arguments the program expects.
     n_args: usize,
 
-    /// The tokens that make up this program, these can be numbers or commands.
+    /// The tokens that make up this program, these can be integers or commands.
     tokens: Vec<Token>,
 }
 
 impl Program {
-    /// Parses line and creates a `Program` object.
+    /// Parses `s` and creates a `Program` object.
     /// Returns an `Err` if the line is not syntactically correct.
-    fn new(line: &str) -> anyhow::Result<Program> {
-        let line = line.trim();
+    fn new(s: &str) -> anyhow::Result<Program> {
+        let s = s.trim();
 
-        if !line.starts_with("(") {
+        if !s.starts_with('(') {
             return Err(Error::ProgramParseMissingOpeningParens.into());
         }
-        let line = &line[1..];
+        let s = &s[1..];
 
-        if !line.ends_with(")") {
+        if !s.ends_with(')') {
             return Err(Error::ProgramParseMissingClosingParens.into());
         }
-        let line = &line[..line.len() - 1];
+        let s = &s[..s.len() - 1];
 
-        let mut iter = line.split_ascii_whitespace();
+        let mut iter = s.split_ascii_whitespace();
 
         match iter.next() {
             Some(token) if token == "postfix" => {}
@@ -115,9 +138,9 @@ impl Program {
     fn exec(&self, args: Vec<isize>) -> anyhow::Result<Vec<Token>> {
         if self.n_args != args.len() {
             return Err(anyhow!(
-                "wrong number of arguments: got {} want {}",
-                args.len(),
-                self.n_args
+                "wrong number of arguments, expected {}: {:?}",
+                self.n_args,
+                args,
             ));
         }
 
@@ -135,21 +158,34 @@ impl Program {
     }
 }
 
-/// Handle a single token.
+/// Handle a single token during execution of a program.
 fn handle_token(stack: &mut Vec<Token>, token: Token) -> anyhow::Result<()> {
     match token {
+        // By definition, integers are just pushed onto the stack.
         Token::Num(val) => {
             stack.push(Token::Num(val));
             Ok(())
         }
+        // Commands are executed with the current stack.
         Token::Cmd(cmd) => match cmd {
+            Cmd::Pop => pop(stack),
             Cmd::Add => add(stack),
             Cmd::Sub => sub(stack),
-            Cmd::Pop => pop(stack),
         },
     }
 }
 
+/// Executed the 'pop' command with a given stack.  Pops the top item off the stack (discarding it).
+fn pop(stack: &mut Vec<Token>) -> anyhow::Result<()> {
+    if stack.is_empty() {
+        return Err(Error::StackMissingToken.into());
+    }
+    stack.pop();
+    Ok(())
+}
+
+/// Executed the 'add' command with a given stack.  Adds the top two integers
+/// together and pushes the result back onto the stack.
 fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     if stack.len() < 2 {
         return Err(Error::StackMissingToken.into());
@@ -172,6 +208,8 @@ fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Executed the 'sub' command with a given stack.  Subtracts the top integer
+/// on the stack from second to top integer and pushes the result back onto the stack.
 fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     if stack.len() < 2 {
         return Err(Error::StackMissingToken.into());
@@ -191,14 +229,6 @@ fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
         }
     }
 
-    Ok(())
-}
-
-fn pop(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    if stack.len() < 1 {
-        return Err(Error::StackMissingToken.into());
-    }
-    stack.pop();
     Ok(())
 }
 
@@ -236,9 +266,6 @@ pub enum Error {
     #[error("program parse error: missing numb args")]
     ProgramParseMissingNumArgs,
 
-    #[error("token line")]
-    TokenParse,
-
     #[error("args parse error: missing opening bracket")]
     ArgsParseMissingOpeningBracket,
 
@@ -273,7 +300,7 @@ impl fmt::Display for Token {
 
 impl Token {
     fn new(s: &str) -> anyhow::Result<Token> {
-        let token = if s.ends_with(")") {
+        let token = if s.ends_with(')') {
             &s[..s.len() - 1]
         } else {
             &s
@@ -284,32 +311,30 @@ impl Token {
         }
 
         match token {
-            "add" => return Ok(Token::Cmd(Cmd::Add)),
-            "sub" => return Ok(Token::Cmd(Cmd::Sub)),
-            "pop" => return Ok(Token::Cmd(Cmd::Pop)),
-            _ => {
-                return Err(anyhow!(format!(
-                    "Parsing token failed: unknown command: {}",
-                    s
-                )))
-            }
+            "pop" => Ok(Token::Cmd(Cmd::Pop)),
+            "add" => Ok(Token::Cmd(Cmd::Add)),
+            "sub" => Ok(Token::Cmd(Cmd::Sub)),
+            _ => Err(anyhow!(format!(
+                "Parsing token failed: unknown command: {}",
+                s
+            ))),
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Cmd {
+    Pop,
     Add,
     Sub,
-    Pop,
 }
 
 impl fmt::Display for Cmd {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match self {
+            Cmd::Pop => "pop",
             Cmd::Add => "add",
             Cmd::Sub => "sub",
-            Cmd::Pop => "pop",
         };
         write!(f, "{}", s)
     }
@@ -322,7 +347,7 @@ mod tests {
     #[test]
     fn can_split_valid_input_line_with_empty_args() {
         let s = "(postfix 0 1 2 add)[]";
-        let (prog, args) = split_input_line(s);
+        let (prog, args) = split(s);
 
         assert_eq!(prog, "(postfix 0 1 2 add)");
         assert_eq!(args, "[]");
@@ -331,7 +356,7 @@ mod tests {
     #[test]
     fn can_split_valid_input_line_without_args() {
         let s = "(postfix 0 1 2 add)";
-        let (prog, args) = split_input_line(s);
+        let (prog, args) = split(s);
 
         assert_eq!(prog, "(postfix 0 1 2 add)");
         assert_eq!(args, "");
@@ -339,10 +364,10 @@ mod tests {
 
     #[test]
     fn can_split_valid_input_line_with_args() {
-        let s = "(postfix 0 1 2 add)[1, 2, 3]";
-        let (prog, args) = split_input_line(s);
+        let s = "(postfix 3 1 2 add)[1, 2, 3]";
+        let (prog, args) = split(s);
 
-        assert_eq!(prog, "(postfix 0 1 2 add)");
+        assert_eq!(prog, "(postfix 3 1 2 add)");
         assert_eq!(args, "[1, 2, 3]");
     }
 
@@ -390,6 +415,17 @@ mod tests {
         if let Ok(_) = prog.exec(vec![]) {
             panic!("we should have error'ed, not enough args on stack for add")
         }
+    }
+
+    #[test]
+    fn interpret_can_pop() {
+        let s = "(postfix 0 1 2 3 pop)[]";
+        let res = interpret(s).expect("valid input string");
+
+        let got = res.expect("valid stack");
+        let want = 2;
+
+        assert_eq!(got, want);
     }
 
     #[test]
@@ -476,17 +512,6 @@ mod tests {
 
         let got = res.expect("valid stack");
         let want = 3;
-
-        assert_eq!(got, want);
-    }
-
-    #[test]
-    fn pop() {
-        let s = "(postfix 0 1 2 3 pop)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 2;
 
         assert_eq!(got, want);
     }
