@@ -624,267 +624,153 @@ mod tests {
         }
     }
 
+    fn run_interpreter_with(s: &str) -> isize {
+        interpret(s)
+            .expect("valid input string")
+            .expect("valid return stack")
+    }
+
     #[test]
     fn interpret_can_pop() {
-        let s = "(postfix 0 1 2 3 pop)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 2;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 1 2 3 pop)[]");
+        assert_eq!(res, 2);
     }
 
     #[test]
     fn interpret_can_add_with_empty_args() {
-        let s = "(postfix 0 1 2 add)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 3;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 1 2 add)[]");
+        assert_eq!(res, 3);
     }
 
     #[test]
     fn interpret_can_add_with_one_arg() {
-        let s = "(postfix 1 2 add)[3]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 5;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 add)[3]");
+        assert_eq!(res, 5);
     }
 
     #[test]
     fn interpret_can_add_with_two_arg() {
-        let s = "(postfix 2 add)[2 3]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 5;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 2 add)[2 3]");
+        assert_eq!(res, 5);
     }
 
     #[test]
     fn interpret_can_sub_with_empty_args() {
-        let s = "(postfix 0 2 1 sub)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 2 1 sub)[]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn interpret_can_sub_negative_result() {
-        let s = "(postfix 0 1 2 sub)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = -1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 1 2 sub)[]");
+        assert_eq!(res, -1);
     }
 
     #[test]
     fn interpret_can_sub_with_one_arg() {
-        let s = "(postfix 1 2 sub)[3]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 sub)[3]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn interpret_can_sub_with_two_arg() {
-        let s = "(postfix 2 sub)[2 3]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 2 sub)[2 3]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn only_top_of_stack_returned() {
-        let s = "(postfix 0 1 2 3)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 3;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 1 2 3)[]");
+        assert_eq!(res, 3);
     }
 
     #[test]
     fn interpret_can_mul_with_one_arg() {
-        let s = "(postfix 1 2 mul)[3]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 6;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 mul)[3]");
+        assert_eq!(res, 6);
     }
 
     #[test]
     fn interpret_can_div_with_one_arg() {
-        let s = "(postfix 1 2 div)[7]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 3;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 div)[7]");
+        assert_eq!(res, 3);
     }
 
     #[test]
     fn interpret_can_get_remainder_with_one_arg() {
-        let s = "(postfix 1 2 rem)[7]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 rem)[7]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn interpret_can_lt_true() {
-        let s = "(postfix 1 7 lt)[2]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 7 lt)[2]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn interpret_can_lt_false() {
-        let s = "(postfix 1 2 lt)[7]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 0;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 lt)[7]");
+        assert_eq!(res, 0);
     }
 
     #[test]
     fn interpret_can_gt_true() {
-        let s = "(postfix 1 2 gt)[7]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 2 gt)[7]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn interpret_can_gt_false() {
-        let s = "(postfix 1 7 gt)[2]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 0;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 7 gt)[2]");
+        assert_eq!(res, 0);
     }
 
     #[test]
     fn interpret_can_eq_true() {
-        let s = "(postfix 1 7 eq)[7]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 1;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 7 eq)[7]");
+        assert_eq!(res, 1);
     }
 
     #[test]
     fn interpret_can_eq_false() {
-        let s = "(postfix 1 7 eq)[2]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 0;
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 1 7 eq)[2]");
+        assert_eq!(res, 0);
     }
 
     #[test]
     fn interpret_can_swap() {
-        let s = "(postfix 0 1 2 3 swap)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 2; // stack == (1, 3, 2)
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 1 2 3 swap)[]");
+        assert_eq!(res, 2); // stack == (1, 3, 2)
     }
 
     #[test]
     fn interpret_can_select_0() {
-        let s = "(postfix 3 sel)[8, 9, 0]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 8; // stack == (8)
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 3 sel)[8, 9, 0]");
+        assert_eq!(res, 8); // stack == (8)
     }
 
     #[test]
     fn interpret_can_select_1() {
-        let s = "(postfix 3 sel)[8, 9, 1]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 9; // stack == (9)
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 3 sel)[8, 9, 1]");
+        assert_eq!(res, 9); // stack == (9)
     }
 
     #[test]
     fn interpret_can_nget_index_1() {
-        let s = "(postfix 0 1 2 3 1 nget)[]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 3; // stack == (1, 2, 3, 3)
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 0 1 2 3 1 nget)[]");
+        assert_eq!(res, 3); // stack == (1, 2, 3, 3)
     }
 
     #[test]
     fn interpret_can_nget_middle_index() {
-        let s = "(postfix 5 4 nget)[1, 2, 3, 4, 5]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 4; // stack == (5, 4, 3, 2, 1, 4)
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 5 4 nget)[1, 2, 3, 4, 5]");
+        assert_eq!(res, 4); // stack == (5, 4, 3, 2, 1, 4)
     }
 
     #[test]
     fn interpret_can_nget_last_index() {
-        let s = "(postfix 3 6 7 5 nget)[7, 8, 9]";
-        let res = interpret(s).expect("valid input string");
-
-        let got = res.expect("valid stack");
-        let want = 9; // stack == (9, 8, 7, 6, 7, 9)
-
-        assert_eq!(got, want);
+        let res = run_interpreter_with("(postfix 3 6 7 5 nget)[7, 8, 9]");
+        assert_eq!(res, 9); // stack == (9, 8, 7, 6, 7, 9)
     }
 }
