@@ -206,13 +206,13 @@ fn add(stack: &mut Vec<Token>) -> anyhow::Result<()> {
 /// the stack and does 'x - y' where 'x' was the second to top stack integer and
 /// 'y' was the top stack integer.  Pushes the result back onto the stack.
 fn sub(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_operation(stack, "add", |x, y| x - y)
+    do_binary_operation(stack, "sub", |x, y| x - y)
 }
 
 /// Execute the 'mul' command with a given stack.  Pops the two top integers off
 /// the stack and multiplies them together.  Pushes the result back onto the stack.
 fn mul(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_operation(stack, "add", |x, y| x * y)
+    do_binary_operation(stack, "mul", |x, y| x * y)
 }
 
 /// Execute the 'div' command with a given stack.  Pops the two top integers off
@@ -220,13 +220,13 @@ fn mul(stack: &mut Vec<Token>) -> anyhow::Result<()> {
 /// 'y' is the top stack integer.  Discards the remainder and pushes the result
 /// back onto the stack.
 fn div(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_operation(stack, "add", |x, y| x / y)
+    do_binary_operation(stack, "div", |x, y| x / y)
 }
 
 /// Executed the 'rem' command with a given stack.  Pops the two top integers off
 /// the stack and does integer division pushing the remainder back onto the stack.
 fn rem(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_operation(stack, "add", |x, y| x - ((x / y) * y))
+    do_binary_operation(stack, "rem", |x, y| x - ((x / y) * y))
 }
 
 fn do_binary_operation(
@@ -263,7 +263,7 @@ fn do_binary_operation(
 /// 'y' was the top stack integer.  If true, pushes '1' onto the stack.  If
 /// false, pushes '0' onto the stack.
 fn lt(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_truth_operation(stack, "add", |x, y| x < y)
+    do_binary_truth_operation(stack, "lt", |x, y| x < y)
 }
 
 /// Execute the 'gt' command with a given stack.  Pops the two top integers off
@@ -271,7 +271,7 @@ fn lt(stack: &mut Vec<Token>) -> anyhow::Result<()> {
 /// 'y' was the top stack integer.  If true, pushes '1' onto the stack.  If
 /// false, pushes '0' onto the stack.
 fn gt(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_truth_operation(stack, "add", |x, y| x > y)
+    do_binary_truth_operation(stack, "gt", |x, y| x > y)
 }
 
 /// Execute the 'eq' command with a given stack.  Pops the two top integers off
@@ -279,7 +279,7 @@ fn gt(stack: &mut Vec<Token>) -> anyhow::Result<()> {
 /// 'y' was the top stack integer.  If true, pushes '1' onto the stack.  If
 /// false, pushes '0' onto the stack.
 fn eq(stack: &mut Vec<Token>) -> anyhow::Result<()> {
-    do_binary_truth_operation(stack, "add", |x, y| x == y)
+    do_binary_truth_operation(stack, "eq", |x, y| x == y)
 }
 
 fn do_binary_truth_operation(
