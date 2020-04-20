@@ -102,6 +102,8 @@ impl Program {
     /// Parses `s` and creates a `Program` object.
     /// Returns an `Err` if the line is not syntactically correct.
     fn new(s: &str) -> anyhow::Result<Program> {
+        validate_program_string(s)?;
+
         let s = s.trim();
 
         if !s.starts_with('(') {
@@ -158,6 +160,38 @@ impl Program {
 
         Ok(stack)
     }
+}
+
+fn validate_program_string(s: &str) -> anyhow::Result<()> {
+    validate_parenthesis(s)?;
+    // TODO: Do more validation?
+    Ok(())
+}
+
+fn validate_parenthesis(s: &str) -> anyhow::Result<()> {
+    let mut open_parens = 0;
+    let mut close_parens = 0;
+
+    for c in s.chars() {
+        if c == '(' {
+            open_parens += 1;
+            continue;
+        }
+        if c == ')' {
+            close_parens += 1;
+            continue;
+        }
+    }
+
+    if open_parens < close_parens {
+        return Err(Error::ProgramParseMissingOpeningParens)?;
+    }
+
+    if close_parens < open_parens {
+        return Err(Error::ProgramParseMissingClosingParens)?;
+    }
+
+    Ok(())
 }
 
 /// Handle a single token during execution of a program.
@@ -772,5 +806,28 @@ mod tests {
     fn interpret_can_nget_last_index() {
         let res = run_interpreter_with("(postfix 3 6 7 5 nget)[7, 8, 9]");
         assert_eq!(res, 9); // stack == (9, 8, 7, 6, 7, 9)
+    }
+
+    #[test]
+    fn can_validate_balanced_parens() {
+        let s = "(postfix 0 1 2 sub)";
+        let result = validate_program_string(s);
+        result.expect("valid result")
+    }
+
+    #[should_panic]
+    #[test]
+    fn can_invalidate_unbalanced_close_parens() {
+        let s = "(postfix 0 1 2 sub))";
+        let result = validate_program_string(s);
+        result.expect("invalid result")
+    }
+
+    #[should_panic]
+    #[test]
+    fn can_invalidate_unbalanced_open_parens() {
+        let s = "(postfix (0 1 2 sub)";
+        let result = validate_program_string(s);
+        result.expect("invalid result")
     }
 }
