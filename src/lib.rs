@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use std::dbg;
 use std::fmt;
+use std::iter::Iterator;
 
 /// Interpret line and return the top item of the stack after execution.
 pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
@@ -103,7 +104,6 @@ impl Program {
     /// Returns an `Err` if the line is not syntactically correct.
     fn new(s: &str) -> anyhow::Result<Program> {
         validate_program_string(s)?;
-
         let s = s.trim();
 
         if !s.starts_with('(') {
@@ -115,8 +115,9 @@ impl Program {
             return Err(Error::ProgramParseMissingClosingParens.into());
         }
         let s = &s[..s.len() - 1];
+        let s = s.trim();
 
-        let mut iter = s.split_ascii_whitespace();
+        let mut iter = PostfixIterator::new(s);
 
         match iter.next() {
             Some(token) if token == "postfix" => {}
@@ -192,6 +193,50 @@ fn validate_parenthesis(s: &str) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// An iterator that iterates over an input string representing a postfix program.
+struct PostfixIterator {
+    s: String,
+}
+
+impl PostfixIterator {
+    fn new(s: &str) -> Self {
+        PostfixIterator { s: s.to_string() }
+    }
+}
+
+impl Iterator for PostfixIterator {
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.s.len() == 0 {
+            return None;
+        }
+
+        if self.s.starts_with("(") {
+            // TODO: Handle executable sequence.
+        }
+
+        if is_last_token(&self.s) {
+            let last = self.s.clone();
+            self.s = String::from("");
+            return Some(last);
+        }
+
+        let index = self.s.find(" ").unwrap(); // If its not the last token there must be white space.
+        let tmp = self.s.split_off(index);
+        let token = self.s.clone();
+        self.s = tmp;
+
+        self.s = self.s.trim_start().to_string();
+
+        Some(token)
+    }
+}
+
+fn is_last_token(s: &str) -> bool {
+    return !s.contains(" ");
 }
 
 /// Handle a single token during execution of a program.
