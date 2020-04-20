@@ -559,17 +559,11 @@ impl fmt::Display for Token {
 
 impl Token {
     fn new(s: &str) -> anyhow::Result<Token> {
-        let token = if s.ends_with(')') {
-            &s[..s.len() - 1]
-        } else {
-            &s
-        };
-
-        if let Ok(val) = token.parse::<isize>() {
+        if let Ok(val) = s.parse::<isize>() {
             return Ok(Token::Num(val));
         }
 
-        match token {
+        match s {
             "pop" => Ok(Token::Cmd(Cmd::Pop)),
             "add" => Ok(Token::Cmd(Cmd::Add)),
             "sub" => Ok(Token::Cmd(Cmd::Sub)),
