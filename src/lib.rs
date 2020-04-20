@@ -156,7 +156,7 @@ impl Program {
         }
 
         for token in self.tokens.iter() {
-            handle_token(&mut stack, *token)?;
+            handle_token(&mut stack, token)?;
         }
 
         Ok(stack)
@@ -215,7 +215,15 @@ impl Iterator for PostfixIterator {
         }
 
         if self.s.starts_with("(") {
-            // TODO: Handle executable sequence.
+            let index = index_of_closing_parenthesis(&self.s) + 1;
+
+            let tmp = self.s.split_off(index);
+            let token = self.s.clone();
+            self.s = tmp;
+
+            self.s = self.s.trim_start().to_string();
+
+            return Some(token);
         }
 
         if is_last_token(&self.s) {
@@ -239,14 +247,38 @@ fn is_last_token(s: &str) -> bool {
     return !s.contains(" ");
 }
 
+// `s` is guaranteed to be valid.
+fn index_of_closing_parenthesis(s: &str) -> usize {
+    let mut count = 0;
+
+    for (i, c) in s.char_indices() {
+        if c == '(' {
+            count += 1;
+        } else if c == ')' {
+            count -= 1;
+            if count == 0 {
+                return i;
+            }
+        }
+    }
+    unreachable!()
+}
+
 /// Handle a single token during execution of a program.
-fn handle_token(stack: &mut Vec<Token>, token: Token) -> anyhow::Result<()> {
+fn handle_token(stack: &mut Vec<Token>, token: &Token) -> anyhow::Result<()> {
     match token {
         // By definition, integers are just pushed onto the stack.
         Token::Num(val) => {
-            stack.push(Token::Num(val));
+            stack.push(Token::Num(*val));
             Ok(())
         }
+
+        // Also, by definition, executable sequences are also just pushed onto the stack.
+        Token::Seq(s) => {
+            stack.push(Token::Seq(s.clone()));
+            Ok(())
+        }
+
         // Commands are executed with the current stack.
         Token::Cmd(cmd) => match cmd {
             Cmd::Pop => pop(stack),
@@ -261,6 +293,7 @@ fn handle_token(stack: &mut Vec<Token>, token: Token) -> anyhow::Result<()> {
             Cmd::Swap => swap(stack),
             Cmd::Sel => sel(stack),
             Cmd::Nget => nget(stack),
+            Cmd::Exec => exec(stack),
         },
     }
 }
@@ -480,6 +513,11 @@ fn nget(stack: &mut Vec<Token>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Execute the 'exec' command with a given stack.  Pop the top item off the stack (it must be and executable sequence).  Pre-pend the sequence to the list of tokens making up the currently running program.
+fn exec(_stack: &mut Vec<Token>) -> anyhow::Result<()> {
+    unimplemented!()
+}
+
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut v = vec![];
@@ -541,10 +579,11 @@ pub enum Error {
     ReturnWrongToken(String),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Token {
     Num(isize),
     Cmd(Cmd),
+    Seq(String),
 }
 
 impl fmt::Display for Token {
@@ -552,6 +591,7 @@ impl fmt::Display for Token {
         let s = match self {
             Token::Num(val) => val.to_string(),
             Token::Cmd(cmd) => cmd.to_string(),
+            Token::Seq(s) => s.to_string(),
         };
         write!(f, "{}", s)
     }
@@ -559,6 +599,10 @@ impl fmt::Display for Token {
 
 impl Token {
     fn new(s: &str) -> anyhow::Result<Token> {
+        if s.starts_with("(") {
+            return Ok(Token::Seq(s.to_string()));
+        }
+
         if let Ok(val) = s.parse::<isize>() {
             return Ok(Token::Num(val));
         }
@@ -576,6 +620,7 @@ impl Token {
             "swap" => Ok(Token::Cmd(Cmd::Swap)),
             "sel" => Ok(Token::Cmd(Cmd::Sel)),
             "nget" => Ok(Token::Cmd(Cmd::Nget)),
+            "exec" => Ok(Token::Cmd(Cmd::Exec)),
             _ => Err(anyhow!(format!(
                 "Parsing token failed: unknown command: {}",
                 s
@@ -598,6 +643,7 @@ enum Cmd {
     Swap,
     Sel, // Select, ternary operator.
     Nget,
+    Exec, // Pop and execute an executable sequence.
 }
 
 impl fmt::Display for Cmd {
@@ -615,6 +661,7 @@ impl fmt::Display for Cmd {
             Cmd::Swap => "swap",
             Cmd::Sel => "sel",
             Cmd::Nget => "nget",
+            Cmd::Exec => "exec",
         };
         write!(f, "{}", s)
     }
@@ -868,5 +915,29 @@ mod tests {
         let s = "(postfix (0 1 2 sub)";
         let result = validate_program_string(s);
         result.expect("invalid result")
+    }
+
+    #[test]
+    fn iterator_can_handle_simple_executable_sequences() {
+        let s = "(1 sub)";
+        let mut iter = PostfixIterator::new(&s);
+        let got = iter.next().unwrap();
+
+        assert_eq!(got, s)
+    }
+
+    #[test]
+    fn iterator_can_handle_nested_executable_sequences() {
+        let s = "(1 sub (1 sub))";
+        let mut iter = PostfixIterator::new(&s);
+        let got = iter.next().unwrap();
+
+        assert_eq!(got, s)
+    }
+
+    #[test]
+    fn program_parses_exec() {
+        let s = "(postfix 0 (2 3 add) exec)";
+        let _ = Program::new(s).expect("simple exec program");
     }
 }
