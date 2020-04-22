@@ -7,7 +7,7 @@ use std::iter::Iterator;
 /// Interpret line and return the top item of the stack after execution.
 pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
     let (mut program, args) = parse_input_string(line)?;
-    let mut stack = program.exec(args)?;
+    let mut stack = program.run(args)?;
 
     match stack.pop() {
         Some(token) => match token {
@@ -138,8 +138,8 @@ impl Program {
         Ok(Program { n_args, tokens })
     }
 
-    /// Execute the program and return the top item from the stack.
-    fn exec(&mut self, args: Vec<isize>) -> anyhow::Result<Vec<Token>> {
+    /// Run the program and return the top item from the stack.
+    fn run(&mut self, args: Vec<isize>) -> anyhow::Result<Vec<Token>> {
         if self.n_args != args.len() {
             return Err(anyhow!(
                 "wrong number of arguments, expected {}: {:?}",
