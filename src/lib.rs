@@ -1,11 +1,12 @@
 use anyhow::anyhow;
+use std::collections::VecDeque;
 use std::dbg;
 use std::fmt;
 use std::iter::Iterator;
 
 /// Interpret line and return the top item of the stack after execution.
 pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {
-    let (program, args) = parse_input_string(line)?;
+    let (mut program, args) = parse_input_string(line)?;
     let mut stack = program.exec(args)?;
 
     match stack.pop() {
@@ -94,7 +95,7 @@ struct Program {
     n_args: usize,
 
     /// The tokens that make up this program, these can be integers or commands.
-    tokens: Vec<Token>,
+    tokens: VecDeque<Token>,
 }
 
 impl Program {
@@ -127,18 +128,18 @@ impl Program {
             .ok_or_else(|| Error::ProgramParseMissingNumArgs)?
             .parse::<usize>()?;
 
-        let mut tokens = vec![];
+        let mut tokens = VecDeque::new();
 
         for t in iter {
             let token = Token::new(&t)?;
-            tokens.push(token);
+            tokens.push_back(token);
         }
 
         Ok(Program { n_args, tokens })
     }
 
     /// Execute the program and return the top item from the stack.
-    fn exec(&self, args: Vec<isize>) -> anyhow::Result<Vec<Token>> {
+    fn exec(&mut self, args: Vec<isize>) -> anyhow::Result<Vec<Token>> {
         if self.n_args != args.len() {
             return Err(anyhow!(
                 "wrong number of arguments, expected {}: {:?}",
@@ -154,8 +155,9 @@ impl Program {
             stack.push(Token::Num(*arg));
         }
 
-        for token in self.tokens.iter() {
-            handle_token(&mut stack, token)?;
+        while self.tokens.len() > 0 {
+            let token = self.tokens.pop_front().unwrap();
+            handle_token(&mut stack, &token)?;
         }
 
         Ok(stack)
@@ -724,7 +726,7 @@ mod tests {
     #[test]
     fn program_execs_add() {
         let s = "(postfix 0 1 2 add)";
-        let prog = Program::new(s).expect("parse trivial add program");
+        let mut prog = Program::new(s).expect("parse trivial add program");
 
         let mut stack = prog.exec(vec![]).expect("exec");
         let got = stack.pop().expect("valid stack");
@@ -736,7 +738,7 @@ mod tests {
     #[test]
     fn program_execs_add_with_error() {
         let s = "(postfix 0 1 add)"; // Remember first 0 is number of args.
-        let prog = Program::new(s).expect("parse trivial add program");
+        let mut prog = Program::new(s).expect("parse trivial add program");
 
         if let Ok(_) = prog.exec(vec![]) {
             panic!("we should have error'ed, not enough args on stack for add")
