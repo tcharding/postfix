@@ -55,7 +55,7 @@ pub fn split(s: &str) -> (&str, &str) {
 /// # Examples
 /// ```
 /// let args = "[1, 2, 3]";
-/// let want = vec![3, 2, 1];
+/// let want = vec![1, 2, 3];
 /// let got = postfix::parse_args(args).unwrap();
 /// assert_eq!(got, want);
 /// ```
@@ -84,8 +84,6 @@ pub fn parse_args(s: &str) -> anyhow::Result<Vec<isize>> {
         let val = arg.parse::<isize>()?;
         v.push(val);
     }
-    // We push the args onto the stack in reverse order.
-    v.reverse();
 
     Ok(v)
 }
@@ -151,8 +149,9 @@ impl Program {
 
         let mut stack = Vec::new();
 
-        for arg in args {
-            stack.push(Token::Num(arg));
+        // In line with the spec, we push the args onto the stack in reverse order.
+        for arg in args.iter().rev() {
+            stack.push(Token::Num(*arg));
         }
 
         for token in self.tokens.iter() {
@@ -710,7 +709,7 @@ mod tests {
     #[test]
     fn can_parse_args() {
         let input = "[1, 2, 3]";
-        let want = vec![3, 2, 1]; // We push the args onto the stack starting at the back.
+        let want = vec![1, 2, 3];
         let got = parse_args(input).expect("can parse args string");
 
         assert_eq!(got, want);
