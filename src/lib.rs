@@ -157,10 +157,44 @@ impl Program {
 
         while self.tokens.len() > 0 {
             let token = self.tokens.pop_front().unwrap();
-            handle_token(&mut stack, &token)?;
+            self.handle_token(&mut stack, &token)?;
         }
 
         Ok(stack)
+    }
+
+    /// Handle a single token during execution of a program.
+    fn handle_token(&self, stack: &mut Vec<Token>, token: &Token) -> anyhow::Result<()> {
+        match token {
+            // By definition, integers are just pushed onto the stack.
+            Token::Num(val) => {
+                stack.push(Token::Num(*val));
+                Ok(())
+            }
+
+            // Also, by definition, executable sequences are also just pushed onto the stack.
+            Token::Seq(s) => {
+                stack.push(Token::Seq(s.clone()));
+                Ok(())
+            }
+
+            // Commands are executed with the current stack.
+            Token::Cmd(cmd) => match cmd {
+                Cmd::Pop => pop(stack),
+                Cmd::Add => add(stack),
+                Cmd::Sub => sub(stack),
+                Cmd::Mul => mul(stack),
+                Cmd::Div => div(stack),
+                Cmd::Rem => rem(stack),
+                Cmd::Lt => lt(stack),
+                Cmd::Gt => gt(stack),
+                Cmd::Eq => eq(stack),
+                Cmd::Swap => swap(stack),
+                Cmd::Sel => sel(stack),
+                Cmd::Nget => nget(stack),
+                Cmd::Exec => exec(stack),
+            },
+        }
     }
 }
 
@@ -263,40 +297,6 @@ fn index_of_closing_parenthesis(s: &str) -> usize {
         }
     }
     unreachable!()
-}
-
-/// Handle a single token during execution of a program.
-fn handle_token(stack: &mut Vec<Token>, token: &Token) -> anyhow::Result<()> {
-    match token {
-        // By definition, integers are just pushed onto the stack.
-        Token::Num(val) => {
-            stack.push(Token::Num(*val));
-            Ok(())
-        }
-
-        // Also, by definition, executable sequences are also just pushed onto the stack.
-        Token::Seq(s) => {
-            stack.push(Token::Seq(s.clone()));
-            Ok(())
-        }
-
-        // Commands are executed with the current stack.
-        Token::Cmd(cmd) => match cmd {
-            Cmd::Pop => pop(stack),
-            Cmd::Add => add(stack),
-            Cmd::Sub => sub(stack),
-            Cmd::Mul => mul(stack),
-            Cmd::Div => div(stack),
-            Cmd::Rem => rem(stack),
-            Cmd::Lt => lt(stack),
-            Cmd::Gt => gt(stack),
-            Cmd::Eq => eq(stack),
-            Cmd::Swap => swap(stack),
-            Cmd::Sel => sel(stack),
-            Cmd::Nget => nget(stack),
-            Cmd::Exec => exec(stack),
-        },
-    }
 }
 
 /// Execute the 'pop' command with a given stack.  Pops the top item off the
