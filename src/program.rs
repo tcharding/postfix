@@ -61,6 +61,14 @@ impl Program {
         })
     }
 
+    pub fn print_stack(&self) {
+        eprint!("( ");
+        for t in self.stack.iter() {
+            eprint!(" {} ", t);
+        }
+        eprintln!(")");
+    }
+
     /// Run the program and return the top item from the stack.
     pub fn run(&mut self, args: Vec<isize>) -> anyhow::Result<Option<Token>> {
         if self.n_args != args.len() {
@@ -81,6 +89,7 @@ impl Program {
 
         while self.tokens.len() > 0 {
             let token = self.tokens.pop_front().unwrap();
+            //            self.print_stack();
             self.handle_token(&token)?;
         }
 
@@ -251,22 +260,10 @@ impl Program {
             return Err(Error::MissingToken.into());
         }
 
-        let ty = self.stack.pop().unwrap();
-        let tx = self.stack.pop().unwrap();
-        match (tx, ty) {
-            (Token::Num(x), Token::Num(y)) => {
-                self.stack.push(Token::Num(y));
-                self.stack.push(Token::Num(x));
-            }
-            (x, y) => {
-                return Err(Error::BinaryCmd {
-                    x: x.to_string(),
-                    y: y.to_string(),
-                    cmd: "swap".to_string(),
-                }
-                .into());
-            }
-        }
+        let x = self.stack.pop().unwrap();
+        let y = self.stack.pop().unwrap();
+        self.stack.push(x);
+        self.stack.push(y);
 
         Ok(())
     }
@@ -283,11 +280,11 @@ impl Program {
         let tx = self.stack.pop().unwrap();
         let op = self.stack.pop().unwrap();
         match (op, tx, ty) {
-            (Token::Num(op), Token::Num(x), Token::Num(y)) => {
+            (Token::Num(op), x, y) => {
                 if op == 0 {
-                    self.stack.push(Token::Num(y));
+                    self.stack.push(y);
                 } else {
-                    self.stack.push(Token::Num(x));
+                    self.stack.push(x);
                 }
             }
             (op, x, y) => {
