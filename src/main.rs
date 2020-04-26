@@ -1,3 +1,4 @@
+use postfix::Program;
 use std::{env, process};
 
 fn main() -> anyhow::Result<()> {
@@ -6,12 +7,18 @@ fn main() -> anyhow::Result<()> {
         usage(&args[0]);
         process::exit(1);
     }
-    let line = &args[1];
-    let result = postfix::interpret(line)?;
+
+    let s = &args[1];
+    let (program, args) = postfix::split(s)?;
+
+    let mut program = Program::new(program)?;
+    let args = postfix::parse_args_program_string(args)?;
+
+    let result = program.run(args)?;
 
     match result {
         None => println!("(empty stack)"),
-        Some(val) => println!("{}", val),
+        Some(token) => println!("result: {}", token),
     }
 
     Ok(())
