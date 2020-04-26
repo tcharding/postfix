@@ -10,7 +10,7 @@ pub enum Token {
 }
 
 impl Token {
-    fn new(s: &str) -> anyhow::Result<Token> {
+    pub fn new(s: &str) -> anyhow::Result<Token> {
         if s.starts_with("(") {
             return Ok(Token::Seq(s.to_string()));
         }
