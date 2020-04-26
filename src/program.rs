@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::token::{Cmd, Token};
 use anyhow::anyhow;
 use std::collections::VecDeque;
 
@@ -10,6 +10,9 @@ pub struct Program {
 
     /// The tokens that make up this program.
     tokens: VecDeque<Token>,
+
+    /// Execution stack
+    stack: Vec<Token>,
 }
 
 impl Program {
@@ -51,19 +54,289 @@ impl Program {
             tokens.push_back(token);
         }
 
-        Ok(Program { n_args, tokens })
+        Ok(Program {
+            n_args,
+            tokens,
+            stack: vec![],
+        })
     }
 
     /// Run the program and return the top item from the stack.
-    pub fn run(&mut self, _args: Vec<isize>) -> anyhow::Result<Option<Token>> {
-        Ok(None)
-    }
-}
+    pub fn run(&mut self, args: Vec<isize>) -> anyhow::Result<Option<Token>> {
+        if self.n_args != args.len() {
+            return Err(anyhow!(
+                "wrong number of arguments, expected {}: {:?}",
+                self.n_args,
+                args,
+            ));
+        }
 
-impl Default for Program {
-    fn default() -> Self {
-        let tokens: VecDeque<Token> = VecDeque::new();
-        Program { n_args: 0, tokens }
+        // New stack for each program execution.
+        self.stack = Vec::new();
+
+        // In line with the spec, we push the args onto the stack in reverse order.
+        for arg in args.iter().rev() {
+            self.stack.push(Token::Num(*arg));
+        }
+
+        while self.tokens.len() > 0 {
+            let token = self.tokens.pop_front().unwrap();
+            self.handle_token(&token)?;
+        }
+
+        Ok(self.stack.pop())
+    }
+
+    /// Handle a single token during execution of a program.
+    ///
+    /// As per the specification, integers and sequences are pushed onto the
+    /// stack. Commands are executed with the current stack.
+    fn handle_token(&mut self, token: &Token) -> anyhow::Result<()> {
+        match token {
+            Token::Num(val) => {
+                self.stack.push(Token::Num(*val));
+                Ok(())
+            }
+            Token::Seq(s) => {
+                self.stack.push(Token::Seq(s.clone()));
+                Ok(())
+            }
+            Token::Cmd(cmd) => match cmd {
+                Cmd::Pop => self.pop(),
+                Cmd::Add => self.add(),
+                Cmd::Sub => self.sub(),
+                Cmd::Mul => self.mul(),
+                Cmd::Div => self.div(),
+                Cmd::Rem => self.rem(),
+                Cmd::Lt => self.lt(),
+                Cmd::Gt => self.gt(),
+                Cmd::Eq => self.eq(),
+                Cmd::Swap => self.swap(),
+                Cmd::Sel => self.sel(),
+                Cmd::Nget => self.nget(),
+                Cmd::Exec => self.exec(),
+            },
+        }
+    }
+
+    /// Execute the 'pop' command with a given stack.  Pops the top item off the
+    /// stack and discards it.
+    fn pop(&mut self) -> anyhow::Result<()> {
+        if self.stack.is_empty() {
+            return Err(Error::MissingToken.into());
+        }
+        self.stack.pop();
+        Ok(())
+    }
+
+    /// Execute the 'add' command with a given stack.  Pops the two top integers off
+    /// the stack and adds them together.  Pushes the result back onto the stack.
+    fn add(&mut self) -> anyhow::Result<()> {
+        self.binary_operation("add", |x, y| x + y)
+    }
+
+    /// Execute the 'sub' command with a given stack.  Pops the two top integers off
+    /// the stack and does 'x - y' where 'x' was the second to top stack integer and
+    /// 'y' was the top stack integer.  Pushes the result back onto the stack.
+    fn sub(&mut self) -> anyhow::Result<()> {
+        self.binary_operation("sub", |x, y| x - y)
+    }
+
+    /// Execute the 'mul' command with a given stack.  Pops the two top integers off
+    /// the stack and multiplies them together.  Pushes the result back onto the stack.
+    fn mul(&mut self) -> anyhow::Result<()> {
+        self.binary_operation("mul", |x, y| x * y)
+    }
+
+    /// Execute the 'div' command with a given stack.  Pops the two top integers off
+    /// the stack and does x / y where 'x' is the second to top stack integer and
+    /// 'y' is the top stack integer.  Discards the remainder and pushes the result
+    /// back onto the stack.
+    fn div(&mut self) -> anyhow::Result<()> {
+        self.binary_operation("div", |x, y| x / y)
+    }
+
+    /// Executed the 'rem' command with a given stack.  Pops the two top integers off
+    /// the stack and does integer division pushing the remainder back onto the stack.
+    fn rem(&mut self) -> anyhow::Result<()> {
+        self.binary_operation("rem", |x, y| x - ((x / y) * y))
+    }
+
+    fn binary_operation(
+        &mut self,
+        name: &str,
+        op: fn(isize, isize) -> isize,
+    ) -> anyhow::Result<()> {
+        if self.stack.len() < 2 {
+            return Err(Error::MissingToken.into());
+        }
+
+        let ty = self.stack.pop().unwrap();
+        let tx = self.stack.pop().unwrap();
+        match (tx, ty) {
+            (Token::Num(x), Token::Num(y)) => {
+                let res = op(x, y);
+                self.stack.push(Token::Num(res));
+            }
+            (x, y) => {
+                return Err(Error::BinaryCmd {
+                    x: x.to_string(),
+                    y: y.to_string(),
+                    cmd: name.to_string(),
+                }
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute the 'lt' command with a given stack.  Pops the two top integers off
+    /// the stack and does 'x < y' where 'x' was the second to top stack integer and
+    /// 'y' was the top stack integer.  If true, pushes '1' onto the stack.  If
+    /// false, pushes '0' onto the stack.
+    fn lt(&mut self) -> anyhow::Result<()> {
+        self.binary_truth_operation("lt", |x, y| x < y)
+    }
+
+    /// Execute the 'gt' command with a given stack.  Pops the two top integers off
+    /// the stack and does 'x > y' where 'x' was the second to top stack integer and
+    /// 'y' was the top stack integer.  If true, pushes '1' onto the stack.  If
+    /// false, pushes '0' onto the stack.
+    fn gt(&mut self) -> anyhow::Result<()> {
+        self.binary_truth_operation("gt", |x, y| x > y)
+    }
+
+    /// Execute the 'eq' command with a given stack.  Pops the two top integers off
+    /// the stack and does 'x > y' where 'x' was the second to top stack integer and
+    /// 'y' was the top stack integer.  If true, pushes '1' onto the stack.  If
+    /// false, pushes '0' onto the stack.
+    fn eq(&mut self) -> anyhow::Result<()> {
+        self.binary_truth_operation("eq", |x, y| x == y)
+    }
+
+    fn binary_truth_operation(
+        &mut self,
+        name: &str,
+        op: fn(isize, isize) -> bool,
+    ) -> anyhow::Result<()> {
+        if self.stack.len() < 2 {
+            return Err(Error::MissingToken.into());
+        }
+
+        let ty = self.stack.pop().unwrap();
+        let tx = self.stack.pop().unwrap();
+        match (tx, ty) {
+            (Token::Num(x), Token::Num(y)) => {
+                let val = if op(x, y) { 1 } else { 0 };
+                self.stack.push(Token::Num(val));
+            }
+            (x, y) => {
+                return Err(Error::BinaryCmd {
+                    x: x.to_string(),
+                    y: y.to_string(),
+                    cmd: name.to_string(),
+                }
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute the 'swap' command with a given stack.  Pops the two top integers off
+    /// the stack and pushes them back on in the opposite order.
+    fn swap(&mut self) -> anyhow::Result<()> {
+        if self.stack.len() < 2 {
+            return Err(Error::MissingToken.into());
+        }
+
+        let ty = self.stack.pop().unwrap();
+        let tx = self.stack.pop().unwrap();
+        match (tx, ty) {
+            (Token::Num(x), Token::Num(y)) => {
+                self.stack.push(Token::Num(y));
+                self.stack.push(Token::Num(x));
+            }
+            (x, y) => {
+                return Err(Error::BinaryCmd {
+                    x: x.to_string(),
+                    y: y.to_string(),
+                    cmd: "swap".to_string(),
+                }
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute the 'sel' command with a given stack.  Pops the two three integers
+    /// off the stack, let us call them v1, v2, v3 (from top down).  If v3 == 0
+    /// pushes v1, if v3 is non-zero pushes v2.
+    fn sel(&mut self) -> anyhow::Result<()> {
+        if self.stack.len() < 2 {
+            return Err(Error::MissingToken.into());
+        }
+
+        let ty = self.stack.pop().unwrap();
+        let tx = self.stack.pop().unwrap();
+        let op = self.stack.pop().unwrap();
+        match (op, tx, ty) {
+            (Token::Num(op), Token::Num(x), Token::Num(y)) => {
+                if op == 0 {
+                    self.stack.push(Token::Num(y));
+                } else {
+                    self.stack.push(Token::Num(x));
+                }
+            }
+            (op, x, y) => {
+                return Err(Error::TernaryCmd {
+                    z: op.to_string(),
+                    x: x.to_string(),
+                    y: y.to_string(),
+                    cmd: "sel".to_string(),
+                }
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute the 'nget' command with a given stack.  Call the top value of stack
+    /// `vindex`, then subsequent values `v1`, `v2` ...  Pop `vindex`, the push `vi`
+    /// onto the stack.  Error if `i` is out of range or stack is empty.
+    fn nget(&mut self) -> anyhow::Result<()> {
+        if self.stack.is_empty() {
+            return Err(Error::MissingToken.into());
+        }
+
+        if let Token::Num(index) = self.stack.pop().unwrap() {
+            let mut save = vec![];
+            for _ in 0..index {
+                if self.stack.is_empty() {
+                    return Err(Error::MissingToken.into());
+                }
+                save.push(self.stack.pop().unwrap());
+            }
+            save.reverse();
+            let new = save[0].clone();
+
+            for t in save.into_iter() {
+                self.stack.push(t);
+            }
+            self.stack.push(new);
+        } else {
+            return Err(Error::WrongToken.into());
+        }
+
+        Ok(())
+    }
+
+    /// Execute the 'exec' command with a given stack.  Pop the top item off the stack (it must be and executable sequence).  Pre-pend the sequence to the list of tokens making up the currently running program.
+    fn exec(&mut self) -> anyhow::Result<()> {
+        unimplemented!()
     }
 }
 
@@ -201,4 +474,239 @@ pub enum Error {
 
     #[error("missing number of arguments")]
     MissingNumArgs,
+
+    #[error("not enough tokens on stack")]
+    MissingToken,
+
+    #[error("incorrect token type on stack")]
+    WrongToken,
+
+    #[error("wrong tokens on stack: (`{x:?}`, `{y:?}`, `{cmd:?}`)")]
+    BinaryCmd { x: String, y: String, cmd: String },
+
+    #[error("wrong tokens on stack: (`{x:?}`, `{y:?}`, `{z:?}`, `{cmd:?}`)")]
+    TernaryCmd {
+        x: String,
+        y: String,
+        z: String,
+        cmd: String,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_basic() {
+        let s = "(postfix 0 1 2 add)";
+        let _ = Program::new(s).expect("trivial add program");
+    }
+
+    #[test]
+    fn parses_complex() {
+        let s = "(postfix 0 1 2 3 add sub (1 gt (2 3 mul)) exec)";
+        let _ = Program::new(s).expect("trivial add program");
+    }
+
+    // Runs a program and returns the value on top of stack.
+    fn run(program: &str, args: Vec<isize>) -> isize {
+        let mut p = Program::new(program).expect("valid program");
+        p.run(args)
+            .expect("valid program execution")
+            .expect("token on stack")
+            .value()
+            .expect("value token")
+    }
+
+    #[test]
+    fn can_validate_balanced_parens() {
+        let s = "(postfix 0 1 2 sub)";
+        let result = validate_program_string(s);
+        result.expect("valid result")
+    }
+
+    #[should_panic]
+    #[test]
+    fn can_invalidate_unbalanced_close_parens() {
+        let s = "(postfix 0 1 2 sub))";
+        let result = validate_program_string(s);
+        result.expect("invalid result")
+    }
+
+    #[should_panic]
+    #[test]
+    fn can_invalidate_unbalanced_open_parens() {
+        let s = "(postfix (0 1 2 sub)";
+        let result = validate_program_string(s);
+        result.expect("invalid result")
+    }
+
+    #[test]
+    fn iterator_can_handle_simple_executable_sequences() {
+        let s = "(1 sub)";
+        let mut iter = PostfixIterator::new(&s);
+        let got = iter.next().unwrap();
+
+        assert_eq!(got, s)
+    }
+
+    #[test]
+    fn iterator_can_handle_nested_executable_sequences() {
+        let s = "(1 sub (1 sub))";
+        let mut iter = PostfixIterator::new(&s);
+        let got = iter.next().unwrap();
+
+        assert_eq!(got, s)
+    }
+
+    #[test]
+    fn can_pop() {
+        let res = run("(postfix 0 1 2 3 pop)", vec![]);
+        assert_eq!(res, 2);
+    }
+
+    #[test]
+    fn can_add_with_empty_args() {
+        let res = run("(postfix 0 1 2 add)", vec![]);
+        assert_eq!(res, 3);
+    }
+
+    #[should_panic]
+    #[test]
+    fn can_add_with_error() {
+        run("(postfix 0 1 add)", vec![]); // Remember first 0 is number of args.
+    }
+
+    #[test]
+    fn can_add_with_one_arg() {
+        let res = run("(postfix 1 2 add)", vec![3]);
+        assert_eq!(res, 5);
+    }
+
+    #[test]
+    fn can_add_with_two_arg() {
+        let res = run("(postfix 2 add)", vec![2, 3]);
+        assert_eq!(res, 5);
+    }
+
+    #[test]
+    fn can_sub_with_empty_args() {
+        let res = run("(postfix 0 2 1 sub)", vec![]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn can_sub_negative_result() {
+        let res = run("(postfix 0 1 2 sub)", vec![]);
+        assert_eq!(res, -1);
+    }
+
+    #[test]
+    fn can_sub_with_one_arg() {
+        let res = run("(postfix 1 2 sub)", vec![3]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn can_sub_with_two_arg() {
+        let res = run("(postfix 2 sub)", vec![2, 3]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn only_top_of_stack_returned() {
+        let res = run("(postfix 0 1 2 3)", vec![]);
+        assert_eq!(res, 3);
+    }
+
+    #[test]
+    fn can_mul_with_one_arg() {
+        let res = run("(postfix 1 2 mul)", vec![3]);
+        assert_eq!(res, 6);
+    }
+
+    #[test]
+    fn can_div_with_one_arg() {
+        let res = run("(postfix 1 2 div)", vec![7]);
+        assert_eq!(res, 3);
+    }
+
+    #[test]
+    fn can_get_remainder_with_one_arg() {
+        let res = run("(postfix 1 2 rem)", vec![7]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn can_lt_true() {
+        let res = run("(postfix 1 7 lt)", vec![2]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn lt_false() {
+        let res = run("(postfix 1 2 lt)", vec![7]);
+        assert_eq!(res, 0);
+    }
+
+    #[test]
+    fn gt_true() {
+        let res = run("(postfix 1 2 gt)", vec![7]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn gt_false() {
+        let res = run("(postfix 1 7 gt)", vec![2]);
+        assert_eq!(res, 0);
+    }
+
+    #[test]
+    fn eq_true() {
+        let res = run("(postfix 1 7 eq)", vec![7]);
+        assert_eq!(res, 1);
+    }
+
+    #[test]
+    fn can_eq_false() {
+        let res = run("(postfix 1 7 eq)", vec![2]);
+        assert_eq!(res, 0);
+    }
+
+    #[test]
+    fn can_swap() {
+        let res = run("(postfix 0 1 2 3 swap)", vec![]);
+        assert_eq!(res, 2); // stack == (1, 3, 2)
+    }
+
+    #[test]
+    fn can_select_0() {
+        let res = run("(postfix 3 sel)", vec![8, 9, 0]);
+        assert_eq!(res, 8); // stack == (8)
+    }
+
+    #[test]
+    fn can_select_1() {
+        let res = run("(postfix 3 sel)", vec![8, 9, 1]);
+        assert_eq!(res, 9); // stack == (9)
+    }
+
+    #[test]
+    fn can_nget_index_1() {
+        let res = run("(postfix 0 1 2 3 1 nget)", vec![]);
+        assert_eq!(res, 3); // stack == (1, 2, 3, 3)
+    }
+
+    #[test]
+    fn can_nget_middle_index() {
+        let res = run("(postfix 5 4 nget)", vec![1, 2, 3, 4, 5]);
+        assert_eq!(res, 4); // stack == (5, 4, 3, 2, 1, 4)
+    }
+
+    #[test]
+    fn can_nget_last_index() {
+        let res = run("(postfix 3 6 7 5 nget)", vec![7, 8, 9]);
+        assert_eq!(res, 9); // stack == (9, 8, 7, 6, 7, 9)
+    }
 }

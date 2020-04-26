@@ -25,6 +25,13 @@ impl Token {
 
         Err(anyhow!(Error::UnknownToken(s.to_string())))
     }
+
+    pub fn value(&self) -> anyhow::Result<isize> {
+        match self {
+            Token::Num(val) => Ok(*val),
+            _ => Err(anyhow!(Error::TokenNotValue)),
+        }
+    }
 }
 
 impl fmt::Display for Token {
@@ -122,4 +129,7 @@ enum Error {
 
     #[error("unknown command: {0}")]
     UnknownCmd(String),
+
+    #[error("not a value token")]
+    TokenNotValue,
 }
