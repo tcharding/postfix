@@ -334,9 +334,38 @@ impl Program {
         Ok(())
     }
 
-    /// Execute the 'exec' command with a given stack.  Pop the top item off the stack (it must be and executable sequence).  Pre-pend the sequence to the list of tokens making up the currently running program.
+    /// Execute the 'exec' command with a given stack.  Pop the top item off the
+    /// stack (it must be and executable sequence).  Pre-pend the sequence to
+    /// the list of tokens making up the currently running program.
     fn exec(&mut self) -> anyhow::Result<()> {
-        unimplemented!()
+        if self.stack.is_empty() {
+            return Err(anyhow!(Error::MissingToken));
+        }
+
+        if let Token::Seq(seq) = self.stack.pop().unwrap() {
+            self.prepend_sequence(&seq)?;
+        } else {
+            return Err(anyhow!(Error::WrongToken));
+        }
+
+        Ok(())
+    }
+
+    // Pre-pends the sequence to the program dequeue of executing tokens.
+    fn prepend_sequence(&mut self, seq: &str) -> anyhow::Result<()> {
+        let seq = &seq[1..seq.len() - 1]; // Remove parens, we know sequence is valid.
+        let iter = PostfixIterator::new(&seq);
+
+        let mut v = vec![];
+        for t in iter {
+            v.push(String::from(t));
+        }
+
+        for t in v.iter().rev() {
+            let token = Token::new(&t)?;
+            self.tokens.push_front(token);
+        }
+        Ok(())
     }
 }
 
@@ -408,6 +437,7 @@ impl Iterator for PostfixIterator {
             return None;
         }
 
+        // Handle executable sequence.
         if self.s.starts_with("(") {
             let index = index_of_closing_parenthesis(&self.s) + 1;
 
@@ -708,5 +738,17 @@ mod tests {
     fn can_nget_last_index() {
         let res = run("(postfix 3 6 7 5 nget)", vec![7, 8, 9]);
         assert_eq!(res, 9); // stack == (9, 8, 7, 6, 7, 9)
+    }
+
+    #[test]
+    fn can_exec_basic_sequence() {
+        let res = run("(postfix 0 2 (1 add) exec)", vec![]);
+        assert_eq!(res, 3);
+    }
+
+    #[test]
+    fn can_exec_complex_sequence() {
+        let res = run("(postfix 0 1 (2 add (4 mul) exec) exec)", vec![]);
+        assert_eq!(res, 12);
     }
 }
