@@ -1,8 +1,5 @@
 use anyhow::anyhow;
-use std::collections::VecDeque;
-use std::dbg;
-use std::fmt;
-use std::iter::Iterator;
+use std::{collections::VecDeque, dbg, fmt, iter::Iterator};
 
 /// Interpret line and return the top item of the stack after execution.
 pub fn interpret(line: &str) -> anyhow::Result<Option<isize>> {

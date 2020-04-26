@@ -1,5 +1,4 @@
-use std::env;
-use std::process;
+use std::{env, process};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
